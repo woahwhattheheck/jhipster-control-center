@@ -23,8 +23,11 @@ fi
 
 if [[ "${JHI_APP:-}" == *"oauth2"* ]] && [[ -a src/main/docker/keycloak.yml ]]; then
     docker_compose -f src/main/docker/keycloak.yml up -d
-    sleep 10
     docker ps -a
+    # Keycloak 26 realm import is slower than the old 10s sleep. Spring Boot
+    # fetches the OIDC discovery document during context refresh, so the app
+    # never binds :7419 if we start Java first.
+    wait_for_http "http://localhost:9080/auth/realms/jhipster/.well-known/openid-configuration" "${WAIT_FOR_HTTP_TIMEOUT:-120}"
 fi
 
 #-------------------------------------------------------------------------------

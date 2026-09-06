@@ -11,3 +11,26 @@ docker_compose() {
     return 1
   fi
 }
+
+# Poll an HTTP URL until it returns success. Used so Keycloak realm import
+# finishes before Spring Boot fetches /.well-known/openid-configuration.
+wait_for_http() {
+  local url="$1"
+  local timeout="${2:-${WAIT_FOR_HTTP_TIMEOUT:-120}}"
+  local elapsed=0
+  echo "Waiting for ${url} (timeout ${timeout}s)"
+  while true; do
+    if curl -sf --max-time 2 "$url" >/dev/null 2>&1; then
+      echo "${url} is up after ${elapsed}s"
+      return 0
+    fi
+    elapsed=$((elapsed + 2))
+    if [[ "$elapsed" -ge "$timeout" ]]; then
+      echo "Timed out waiting for ${url}" >&2
+      docker ps -a || true
+      docker logs docker-keycloak-1 2>&1 | tail -80 || true
+      return 1
+    fi
+    sleep 2
+  done
+}

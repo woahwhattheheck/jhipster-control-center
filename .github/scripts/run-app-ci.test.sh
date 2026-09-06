@@ -189,6 +189,74 @@ else
   fail "run-app-ci.sh launched java or succeeded without compose; status=$status log=$(cat "$FAKE_LOG")"
 fi
 
+# oauth2 jobs must wait for Keycloak OIDC before launching Java.
+if grep -q 'wait_for_http' "$SCRIPT" && grep -q 'openid-configuration' "$SCRIPT"; then
+  pass "run-app-ci.sh waits for Keycloak OIDC discovery before Java"
+else
+  fail "run-app-ci.sh must wait_for_http the Keycloak openid-configuration URL"
+fi
+
+if grep -q 'wait_for_http' "$LIB" && grep -q 'curl -sf' "$LIB"; then
+  pass "compose-lib.sh wait_for_http polls with curl"
+else
+  fail "compose-lib.sh must define wait_for_http using curl"
+fi
+
+OAUTH_BIN="$WORKDIR/oauth"
+mkdir -p "$OAUTH_BIN"
+write_exec "$OAUTH_BIN/docker" <<'BIN'
+#!/bin/bash
+echo "v2 $*" >> "$FAKE_LOG"
+if [[ "${1:-}" == "compose" && "${2:-}" == "version" ]]; then
+  echo "Docker Compose version v2.29.0"
+  exit 0
+fi
+if [[ "${1:-}" == "ps" ]]; then
+  exit 0
+fi
+exit 0
+BIN
+write_exec "$OAUTH_BIN/curl" <<'BIN'
+#!/bin/bash
+echo "curl $*" >> "$FAKE_LOG"
+exit 0
+BIN
+write_exec "$OAUTH_BIN/java" <<'BIN'
+#!/bin/bash
+echo "java-ran $*" >> "$FAKE_LOG"
+exit 0
+BIN
+write_exec "$OAUTH_BIN/sleep" <<'BIN'
+#!/bin/bash
+exit 0
+BIN
+: > "$FAKE_LOG"
+PATH="$OAUTH_BIN:/usr/bin:/bin" JHI_APP=jhcc-static-oauth2 JHI_PROFILE='dev, api-docs, static, oauth2' \
+  bash "$SCRIPT" >/dev/null 2>&1
+if grep -q 'openid-configuration' "$FAKE_LOG" && grep -q '^java-ran ' "$FAKE_LOG"; then
+  pass "oauth2 path waits for OIDC then starts java"
+else
+  fail "oauth2 path did not wait for OIDC before java; log=$(cat "$FAKE_LOG")"
+fi
+
+# If OIDC never comes up, java must not start.
+write_exec "$OAUTH_BIN/curl" <<'BIN'
+#!/bin/bash
+echo "curl-fail $*" >> "$FAKE_LOG"
+exit 1
+BIN
+: > "$FAKE_LOG"
+set +e
+PATH="$OAUTH_BIN:/usr/bin:/bin" WAIT_FOR_HTTP_TIMEOUT=4 JHI_APP=jhcc-static-oauth2 JHI_PROFILE='dev, api-docs, static, oauth2' \
+  bash "$SCRIPT" >/dev/null 2>&1
+oauth_status=$?
+set -e
+if [[ $oauth_status -ne 0 ]] && ! grep -q '^java-ran ' "$FAKE_LOG"; then
+  pass "oauth2 path fails closed when Keycloak OIDC never becomes ready (status=$oauth_status)"
+else
+  fail "oauth2 path started java without OIDC; status=$oauth_status log=$(cat "$FAKE_LOG")"
+fi
+
 echo
 echo "$PASS passed, $FAIL failed"
 if [[ $FAIL -ne 0 ]]; then
