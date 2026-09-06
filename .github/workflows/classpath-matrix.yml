@@ -1,0 +1,127 @@
+name: Nimbus classpath matrix probe (#174)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    probe:
+        name: "sdk=${{ matrix.sdk }} jose=${{ matrix.jose }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    # as-shipped pairing managed by spring-boot-dependencies 2.4.4
+                    - sdk: '8.36.1'
+                      jose: '8.20.2'
+                      note: 'as-shipped'
+                    # the pairing the issue thread points at: 8.x SDK with a 9.x JOSE
+                    - sdk: '8.36.1'
+                      jose: '9.37.3'
+                      note: 'suspected trigger'
+                    # what the existing PRs pin forward to
+                    - sdk: '9.43.6'
+                      jose: '9.37.3'
+                      note: 'candidate fix'
+                    # the pairing managed by spring-boot-dependencies 2.3.1.RELEASE
+                    - sdk: '7.1.1'
+                      jose: '8.20.2'
+                      note: 'boot 2.3.1 pairing'
+        steps:
+            - name: Check out the PR #227 tree (for the test source)
+              uses: actions/checkout@v4
+              with:
+                  ref: e2c4003d2614fa965a0eae8001d3384d35a14205
+
+            - name: Set up JDK 11
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '11'
+
+            - name: Build an isolated probe project
+              run: |
+                  set -e
+                  mkdir -p /tmp/probe/src/test/java/tech/jhipster/controlcenter/config
+                  cp src/test/java/tech/jhipster/controlcenter/config/OidcMetadataMtlsAliasesTest.java \
+                     /tmp/probe/src/test/java/tech/jhipster/controlcenter/config/
+                  cat > /tmp/probe/pom.xml <<'EOF'
+                  <?xml version="1.0" encoding="UTF-8"?>
+                  <project xmlns="http://maven.apache.org/POM/4.0.0"
+                           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>probe</groupId>
+                      <artifactId>nimbus-probe</artifactId>
+                      <version>1.0</version>
+                      <properties>
+                          <maven.compiler.source>11</maven.compiler.source>
+                          <maven.compiler.target>11</maven.compiler.target>
+                          <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+                      </properties>
+                      <dependencies>
+                          <dependency>
+                              <groupId>com.nimbusds</groupId>
+                              <artifactId>oauth2-oidc-sdk</artifactId>
+                              <version>SDK_VERSION</version>
+                          </dependency>
+                          <dependency>
+                              <groupId>com.nimbusds</groupId>
+                              <artifactId>nimbus-jose-jwt</artifactId>
+                              <version>JOSE_VERSION</version>
+                          </dependency>
+                          <dependency>
+                              <groupId>org.junit.jupiter</groupId>
+                              <artifactId>junit-jupiter</artifactId>
+                              <version>5.7.1</version>
+                              <scope>test</scope>
+                          </dependency>
+                          <dependency>
+                              <groupId>org.assertj</groupId>
+                              <artifactId>assertj-core</artifactId>
+                              <version>3.19.0</version>
+                              <scope>test</scope>
+                          </dependency>
+                      </dependencies>
+                      <build>
+                          <plugins>
+                              <plugin>
+                                  <groupId>org.apache.maven.plugins</groupId>
+                                  <artifactId>maven-surefire-plugin</artifactId>
+                                  <version>3.0.0-M5</version>
+                              </plugin>
+                          </plugins>
+                      </build>
+                  </project>
+                  EOF
+                  sed -i 's/^                  //' /tmp/probe/pom.xml
+                  sed -i "s/SDK_VERSION/${{ matrix.sdk }}/; s/JOSE_VERSION/${{ matrix.jose }}/" /tmp/probe/pom.xml
+                  echo '--- probe pom dependency versions ---'
+                  grep -A2 'nimbusds' /tmp/probe/pom.xml | grep version
+
+            - name: Show the effective Nimbus classpath
+              working-directory: /tmp/probe
+              run: mvn -B -ntp dependency:tree -Dincludes=com.nimbusds
+
+            - name: Run OidcMetadataMtlsAliasesTest on this pairing
+              id: probe_test
+              working-directory: /tmp/probe
+              continue-on-error: true
+              run: mvn -B -ntp test
+
+            - name: Report outcome and any parse failure text
+              working-directory: /tmp/probe
+              if: always()
+              run: |
+                  echo "=============================================="
+                  echo "sdk=${{ matrix.sdk }} jose=${{ matrix.jose }} (${{ matrix.note }})"
+                  echo "test outcome: ${{ steps.probe_test.outcome }}"
+                  echo "=============================================="
+                  if [ -d target/surefire-reports ]; then
+                    for f in target/surefire-reports/*.txt; do
+                      echo "--- $f ---"; cat "$f"
+                    done
+                  else
+                    echo "(no surefire reports - compilation or resolution failed)"
+                  fi
