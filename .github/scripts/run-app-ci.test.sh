@@ -103,6 +103,27 @@ else
   fail "SpaWebFilter must not rewrite /oauth2 to index.html (oauth2 e2e cy.request hangs otherwise)"
 fi
 
+OAUTH_TS="$ROOT/src/test/javascript/cypress/support/keycloak-oauth2.ts"
+assert_file "$OAUTH_TS"
+if grep -q 'cy.exec' "$OAUTH_TS" && grep -q 'oauth2/authorization/oidc' "$OAUTH_TS" && ! grep -q "url: '/oauth2/authorization/oidc'" "$OAUTH_TS"; then
+  pass "getOauth2Data uses curl for the authorization 302 (Cypress 6 cy.request hangs on it)"
+else
+  fail "getOauth2Data must not cy.request /oauth2/authorization/oidc; curl returns 302, Cypress 6 hangs 30s"
+fi
+if grep -q "cy.visit('/oauth2/authorization/oidc')" "$OAUTH_TS"; then
+  pass "keycloackLogin follows the OIDC redirect with cy.visit so Chrome handles the 302"
+else
+  fail "keycloackLogin must cy.visit /oauth2/authorization/oidc instead of cy.request followRedirect"
+fi
+
+SIDEBAR="$ROOT/src/test/javascript/cypress/integration/sidebar/sidebar.spec.ts"
+assert_file "$SIDEBAR"
+if grep -q 'management/info' "$SIDEBAR" && grep -q "127.0.0.1:7419" "$SIDEBAR"; then
+  pass "sidebar spec detects oauth2 via /management/info without visiting the SPA first"
+else
+  fail "sidebar spec must not cy.visit the SPA before oauth2 login (home login() races the authorization URL)"
+fi
+
 # --- functional tests of docker_compose with fake binaries ---
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT

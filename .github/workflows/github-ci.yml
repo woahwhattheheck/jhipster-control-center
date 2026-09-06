@@ -70,6 +70,9 @@ jobs:
                 browser: chrome
                 headless: true
                 project: ./
+            - name: Dump application log
+              if: failure()
+              run: tail -n 200 target/jhipster-control-center.log || true
             - name: Sonar analysis
               if: github.repository == 'jhipster/jhipster-control-center' && github.ref == 'refs/heads/main'
               run: |
