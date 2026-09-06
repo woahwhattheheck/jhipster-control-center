@@ -1,4 +1,4 @@
-name: generate vue-loader lockfile update
+name: generate frontend build lockfile update
 
 on:
     workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
                   node -e "console.log('GEN before lockfileVersion =', require('./package-lock.json').lockfileVersion)"
 
             - name: Update vue-loader in package.json and the lockfile only
-              run: npm install --package-lock-only --no-audit --no-fund --save-dev vue-loader@15.11.1 2>&1 | tail -8
+              run: npm install --package-lock-only --no-audit --no-fund --save-dev vue-loader@15.11.1 typescript@4.3.5 2>&1 | tail -8
 
             - name: Record the resulting state
               run: |
@@ -32,6 +32,8 @@ jobs:
                   node -e "console.log('GEN after lockfileVersion =', require('./package-lock.json').lockfileVersion)"
                   node -e "console.log('GEN after locked vue-loader =', require('./package-lock.json').dependencies['vue-loader'].version)"
                   node -e "console.log('GEN after locked webpack =', require('./package-lock.json').dependencies['webpack'].version)"
+                  node -e "console.log('GEN after typescript =', require('./package.json').devDependencies['typescript'])"
+                  node -e "console.log('GEN after locked typescript =', require('./package-lock.json').dependencies['typescript'].version)"
                   echo "--- git diff stat ---"
                   git diff --stat
 
