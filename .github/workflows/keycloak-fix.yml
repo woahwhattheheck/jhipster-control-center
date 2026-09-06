@@ -1,0 +1,96 @@
+name: Keycloak migration fix verification (#174)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    verify:
+        name: "quay keycloak:${{ matrix.tag }} with js-policy removed"
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        strategy:
+            fail-fast: false
+            matrix:
+                tag: ['22.0.5', '26.7.3']
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: d8664ee33600c303f0f25feebcb05b11c009fccb
+
+            - name: Strip the js authorization policy from the realm export
+              run: |
+                  cp -r src/main/docker/realm-config /tmp/realm-config
+                  python3 - <<'PY'
+                  import json
+                  p = '/tmp/realm-config/jhipster-realm.json'
+                  d = json.load(open(p))
+                  removed = []
+                  for c in d.get('clients', []):
+                      a = c.get('authorizationSettings')
+                      if not a:
+                          continue
+                      keep = []
+                      dropped_names = set()
+                      for pol in a.get('policies', []):
+                          if pol.get('type') == 'js':
+                              dropped_names.add(pol.get('name'))
+                              removed.append((c.get('clientId'), pol.get('name')))
+                          else:
+                              keep.append(pol)
+                      # drop references to the removed policies
+                      for pol in keep:
+                          cfg = pol.get('config', {})
+                          if 'applyPolicies' in cfg:
+                              try:
+                                  refs = json.loads(cfg['applyPolicies'])
+                              except Exception:
+                                  continue
+                              refs = [r for r in refs if r not in dropped_names]
+                              if refs:
+                                  cfg['applyPolicies'] = json.dumps(refs)
+                              else:
+                                  cfg.pop('applyPolicies')
+                      a['policies'] = keep
+                  json.dump(d, open(p, 'w'), indent=2)
+                  print('removed js policies:', removed)
+                  PY
+
+            - name: Start quay.io/keycloak/keycloak:${{ matrix.tag }}
+              run: |
+                  docker run -d --name kc \
+                    -p 9080:9080 \
+                    -v "/tmp/realm-config:/opt/keycloak/data/import" \
+                    -e KEYCLOAK_ADMIN=admin \
+                    -e KEYCLOAK_ADMIN_PASSWORD=admin \
+                    -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+                    -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+                    quay.io/keycloak/keycloak:${{ matrix.tag }} \
+                    start-dev --http-port=9080 --http-relative-path=/auth --import-realm
+
+            - name: Wait for the jhipster realm
+              run: |
+                  URL="http://localhost:9080/auth/realms/jhipster/.well-known/openid-configuration"
+                  for i in $(seq 1 60); do
+                    if curl -sf "$URL" -o /tmp/discovery.json; then
+                      echo "FIXRESULT: realm served at /auth after ${i} attempts"
+                      exit 0
+                    fi
+                    sleep 5
+                  done
+                  echo "FIXRESULT: realm did NOT answer"
+                  docker logs kc 2>&1 | tail -40
+                  exit 1
+
+            - name: Check the discovery document
+              run: |
+                  if grep -q "mtls_endpoint_aliases" /tmp/discovery.json; then
+                    echo "FIXRESULT: mtls_endpoint_aliases PRESENT"
+                    python3 -c "import json;print(json.dumps(json.load(open('/tmp/discovery.json'))['mtls_endpoint_aliases'],indent=2)[:400])"
+                  else
+                    echo "FIXRESULT: mtls_endpoint_aliases ABSENT"
+                  fi
+                  python3 -c "import json;print('FIXRESULT: issuer =',json.load(open('/tmp/discovery.json'))['issuer'])"
+
+            - name: Log tail
+              if: always()
+              run: docker logs kc 2>&1 | tail -20 || true
