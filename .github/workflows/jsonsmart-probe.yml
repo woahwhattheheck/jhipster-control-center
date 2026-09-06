@@ -1,0 +1,71 @@
+name: json-smart duplicate/skew probe (#174)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    probe:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - leg: 'patched (PR 227)'
+                      restore_baseline: 'no'
+                    - leg: 'baseline (upstream pom)'
+                      restore_baseline: 'yes'
+        name: "${{ matrix.leg }}"
+        env:
+            BASE_SHA: a8e84d3addc29075849bc43b31e0e656b8a09926
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: d8664ee33600c303f0f25feebcb05b11c009fccb
+                  fetch-depth: 0
+
+            - name: Set up JDK 11
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '11'
+
+            - name: Restore upstream pom for the baseline leg
+              if: matrix.restore_baseline == 'yes'
+              run: git checkout "$BASE_SHA" -- pom.xml
+
+            - name: Resolved net.minidev artifacts
+              run: |
+                  echo "=== dependency:list net.minidev ==="
+                  mvn -ntp -P-webapp dependency:list -Dincludes=net.minidev:* --batch-mode | grep -i minidev || echo "(none reported)"
+                  echo "=== dependency:tree net.minidev (shows range resolution) ==="
+                  mvn -ntp -P-webapp dependency:tree -Dincludes=net.minidev --batch-mode | grep -i minidev || echo "(none reported)"
+
+            - name: Package the application jar
+              run: mvn -ntp -P-webapp package -DskipTests --batch-mode
+
+            - name: Count json-smart copies and JSONObject classes in the artifact
+              run: |
+                  JAR=$(ls target/*.jar | grep -v sources | head -1)
+                  echo "artifact: $JAR"
+                  echo "=== json-smart jars bundled ==="
+                  unzip -l "$JAR" | grep -i "json-smart" || echo "  (no json-smart jar in artifact)"
+                  echo "=== accessor/asm companions ==="
+                  unzip -l "$JAR" | grep -iE "accessors-smart|asm" || echo "  (none)"
+                  echo "=== any net/minidev classes directly in the artifact (relocated or flattened) ==="
+                  unzip -l "$JAR" | grep -i "net/minidev" | head -20 || echo "  (none directly)"
+                  echo "=== count of bundled json-smart jars ==="
+                  N=$(unzip -l "$JAR" | grep -ci "json-smart.*\.jar" || true)
+                  echo "  json-smart jar count = $N"
+                  if [ "$N" -gt 1 ]; then echo "PROBE: DUPLICATE json-smart PRESENT"; else echo "PROBE: single json-smart (no duplicate)"; fi
+
+            - name: Extract and compare JSONObject class identity
+              run: |
+                  JAR=$(ls target/*.jar | grep -v sources | head -1)
+                  mkdir -p /tmp/x && cd /tmp/x && unzip -oq "$GITHUB_WORKSPACE/$JAR" 'BOOT-INF/lib/json-smart*' 2>/dev/null || true
+                  ls -l BOOT-INF/lib/ 2>/dev/null | grep -i smart || echo "  (no json-smart in BOOT-INF/lib)"
+                  for j in BOOT-INF/lib/json-smart*.jar; do
+                    [ -e "$j" ] || continue
+                    echo "--- $j ---"
+                    unzip -l "$j" | grep -c "net/minidev/json/JSONObject.class" | sed 's/^/  JSONObject.class count: /'
+                  done
