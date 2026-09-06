@@ -1,0 +1,59 @@
+name: webpack resolution diagnostic
+
+on:
+    workflow_dispatch:
+
+jobs:
+    diag:
+        name: "upstream main + ${{ matrix.method }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                method: ['npm install', 'npm ci']
+        steps:
+            - name: Check out upstream main (baseline, no changes of mine)
+              uses: actions/checkout@v4
+              with:
+                  ref: a8e84d3addc29075849bc43b31e0e656b8a09926
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '14.16.0'
+
+            - name: Install with ${{ matrix.method }}
+              run: |
+                  node -v && npm -v
+                  ${{ matrix.method }} 2>&1 | tail -15
+
+            - name: What did webpack resolve to?
+              run: |
+                  echo "=== top-level node_modules/webpack ==="
+                  node -e "console.log('DIAG top-level webpack =', require('./node_modules/webpack/package.json').version)" || echo "DIAG top-level webpack MISSING"
+                  echo "=== does the module vue-loader needs exist? ==="
+                  if [ -f node_modules/webpack/lib/rules/DescriptionDataMatcherRulePlugin.js ]; then
+                    echo "DIAG DescriptionDataMatcherRulePlugin: PRESENT"
+                  else
+                    echo "DIAG DescriptionDataMatcherRulePlugin: ABSENT"
+                  fi
+                  echo "=== what webpack does vue-loader itself resolve? ==="
+                  node -e "
+                    const p = require.resolve('webpack/package.json', {paths:['./node_modules/vue-loader']});
+                    console.log('DIAG vue-loader resolves webpack at', p);
+                    console.log('DIAG vue-loader sees webpack version', require(p).version);
+                  " || echo "DIAG vue-loader resolution FAILED"
+                  echo "=== nested webpack copies actually installed ==="
+                  find node_modules -maxdepth 4 -path '*/webpack/package.json' -not -path '*/node_modules/*/node_modules/*/node_modules/*' 2>/dev/null | while read f; do
+                    V=$(node -e "console.log(require('./$f').version)" 2>/dev/null)
+                    echo "  $f -> $V"
+                  done | head -12
+
+            - name: Try the failing build step
+              continue-on-error: true
+              id: build
+              run: npm run webpack:build:main 2>&1 | tail -25
+
+            - name: Outcome
+              if: always()
+              run: echo "DIAG build outcome with ${{ matrix.method }}: ${{ steps.build.outcome }}"
