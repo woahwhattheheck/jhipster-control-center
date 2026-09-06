@@ -89,6 +89,20 @@ else
   fail "keycloak.yml must not use the removed jboss/keycloak image"
 fi
 
+if grep -q 'KC_HOSTNAME=localhost' "$KC"; then
+  pass "keycloak.yml pins KC_HOSTNAME=localhost so OIDC redirects stay on the host"
+else
+  fail "keycloak.yml must set KC_HOSTNAME=localhost (container hostname breaks Cypress cy.request)"
+fi
+
+SPA="$ROOT/src/main/java/tech/jhipster/controlcenter/web/filter/SpaWebFilter.java"
+assert_file "$SPA"
+if grep -q '!path.startsWith("/oauth2")' "$SPA"; then
+  pass "SpaWebFilter leaves /oauth2/authorization/oidc for Spring Security"
+else
+  fail "SpaWebFilter must not rewrite /oauth2 to index.html (oauth2 e2e cy.request hangs otherwise)"
+fi
+
 # --- functional tests of docker_compose with fake binaries ---
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT

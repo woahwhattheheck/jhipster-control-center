@@ -21,7 +21,18 @@ class SpaWebFilterTest {
 
     @Test
     void testFilterPass() {
-        String[] authorizedPath = { "/api", "/management", "/login", "/gateway", "/services", "/swagger", "/v2/api-docs" };
+        String[] authorizedPath = {
+            "/api",
+            "/management",
+            "/login",
+            "/login/oauth2/code/oidc",
+            "/oauth2",
+            "/oauth2/authorization/oidc",
+            "/gateway",
+            "/services",
+            "/swagger",
+            "/v2/api-docs",
+        };
 
         for (String path : authorizedPath) {
             MockServerHttpRequest.BaseBuilder<?> request = MockServerHttpRequest.get(path);
