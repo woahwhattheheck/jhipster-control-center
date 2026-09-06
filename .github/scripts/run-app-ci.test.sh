@@ -89,10 +89,10 @@ else
   fail "keycloak.yml must not use the removed jboss/keycloak image"
 fi
 
-if grep -q 'KC_HOSTNAME=localhost' "$KC"; then
-  pass "keycloak.yml pins KC_HOSTNAME=localhost so OIDC redirects stay on the host"
+if grep -q 'KC_HOSTNAME=http://localhost:9080' "$KC"; then
+  pass "keycloak.yml pins KC_HOSTNAME to http://localhost:9080 so OIDC redirects stay on the host"
 else
-  fail "keycloak.yml must set KC_HOSTNAME=localhost (container hostname breaks Cypress cy.request)"
+  fail "keycloak.yml must set KC_HOSTNAME=http://localhost:9080 (https or container hostname breaks Cypress cy.request)"
 fi
 
 SPA="$ROOT/src/main/java/tech/jhipster/controlcenter/web/filter/SpaWebFilter.java"
@@ -204,10 +204,17 @@ else
 fi
 
 # oauth2 jobs must wait for Keycloak OIDC before launching Java.
+# oauth2 jobs must wait for Keycloak OIDC before launching Java.
 if grep -q 'wait_for_http' "$SCRIPT" && grep -q 'openid-configuration' "$SCRIPT"; then
   pass "run-app-ci.sh waits for Keycloak OIDC discovery before Java"
 else
   fail "run-app-ci.sh must wait_for_http the Keycloak openid-configuration URL"
+fi
+
+if grep -q 'wait_for_http "http://localhost:7419/"' "$SCRIPT" && grep -q 'oauth2/authorization/oidc' "$SCRIPT"; then
+  pass "run-app-ci.sh waits for :7419 and probes the oauth2 authorization redirect"
+else
+  fail "run-app-ci.sh must wait_for_http :7419 and HEAD /oauth2/authorization/oidc on oauth2 jobs"
 fi
 
 if grep -q 'wait_for_http' "$LIB" && grep -q 'curl -sf' "$LIB"; then

@@ -16,10 +16,8 @@ services:
       - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
-      # Pin the advertised frontend host so Spring's OIDC redirect and Cypress
-      # cy.request stay on localhost:9080 instead of the container hostname.
-      - KC_HOSTNAME=localhost
-      - KC_HOSTNAME_PORT=9080
+      # Full URL so discovery advertises http://localhost:9080 (not https).
+      - KC_HOSTNAME=http://localhost:9080
       - KC_HOSTNAME_STRICT=false
       - KC_HTTP_ENABLED=true
     ports:

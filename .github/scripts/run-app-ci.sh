@@ -38,3 +38,17 @@ java \
     -jar ./target/jhipster-control-center-*.jar \
     jhipster-control-center-*.jar \
     --spring.profiles.active="${JHI_PROFILE:-}" &
+
+# Cypress only verifies :7419 when the e2e step starts. Fail here if the
+# process never binds, and (oauth2) if the authorization redirect hangs.
+wait_for_http "http://localhost:7419/" "${WAIT_FOR_HTTP_TIMEOUT:-120}"
+if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
+    echo "=== HEAD /oauth2/authorization/oidc ==="
+    if ! curl -sS --max-time 8 --max-redirs 0 -D - -o /dev/null \
+        -w "http_code=%{http_code} redirect=%{redirect_url}\n" \
+        "http://localhost:7419/oauth2/authorization/oidc"; then
+        echo "oauth2 authorization endpoint did not respond" >&2
+        tail -120 target/jhipster-control-center.log >&2 || true
+        exit 1
+    fi
+fi
