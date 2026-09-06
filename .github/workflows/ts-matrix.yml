@@ -1,4 +1,4 @@
-name: typescript compatibility matrix
+name: typescript compatibility matrix v2
 
 on:
     workflow_dispatch:
@@ -25,12 +25,13 @@ jobs:
             - name: Install
               run: npm ci --no-audit --no-fund 2>&1 | tail -3
 
-            - name: Apply the vue-loader fix from PR 230 in every leg
-              run: npm install --no-save --no-audit --no-fund vue-loader@15.11.1 2>&1 | tail -3
-
-            - name: Optionally change TypeScript
-              if: matrix.ts != 'as-locked'
-              run: npm install --no-save --no-audit --no-fund typescript@${{ matrix.ts }} 2>&1 | tail -3
+            - name: Apply vue-loader and TypeScript together in one install
+              run: |
+                  if [ "${{ matrix.ts }}" = "as-locked" ]; then
+                    npm install --no-save --no-audit --no-fund vue-loader@15.11.1 2>&1 | tail -3
+                  else
+                    npm install --no-save --no-audit --no-fund vue-loader@15.11.1 typescript@${{ matrix.ts }} 2>&1 | tail -3
+                  fi
 
             - name: Versions in play
               run: |
