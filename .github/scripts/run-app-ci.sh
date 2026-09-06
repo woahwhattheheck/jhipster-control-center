@@ -27,7 +27,20 @@ if [[ "${JHI_APP:-}" == *"oauth2"* ]] && [[ -a src/main/docker/keycloak.yml ]]; 
     # Keycloak 26 realm import is slower than the old 10s sleep. Spring Boot
     # fetches the OIDC discovery document during context refresh, so the app
     # never binds :7419 if we start Java first.
-    wait_for_http "http://localhost:9080/auth/realms/jhipster/.well-known/openid-configuration" "${WAIT_FOR_HTTP_TIMEOUT:-120}"
+    OIDC_DISCOVERY="http://localhost:9080/auth/realms/jhipster/.well-known/openid-configuration"
+    wait_for_http "$OIDC_DISCOVERY" "${WAIT_FOR_HTTP_TIMEOUT:-120}"
+    # Security 5.4 ClientRegistrations.withProviderConfiguration Assert.state
+    # requires discovery.issuer == spring.security.oauth2.client.provider.oidc.issuer-uri.
+    # Keycloak hostname v2 with KC_HOSTNAME=http://localhost:9080 (no /auth)
+    # advertised issuer=http://localhost:9080/realms/jhipster and Java never bound.
+    EXPECTED_ISSUER="http://localhost:9080/auth/realms/jhipster"
+    issuer="$(curl -sf --max-time 5 "$OIDC_DISCOVERY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("issuer",""))')"
+    if [[ "$issuer" != "$EXPECTED_ISSUER" ]]; then
+        echo "OIDC issuer mismatch: got '${issuer}' want '${EXPECTED_ISSUER}'" >&2
+        echo "Keycloak KC_HOSTNAME must include the /auth relative path." >&2
+        exit 1
+    fi
+    echo "OIDC issuer=${issuer}"
 fi
 
 #-------------------------------------------------------------------------------

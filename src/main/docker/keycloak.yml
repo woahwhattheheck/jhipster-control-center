@@ -16,8 +16,13 @@ services:
       - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
-      # Full URL so discovery advertises http://localhost:9080 (not https).
-      - KC_HOSTNAME=http://localhost:9080
+      # Hostname v2 full URL must include the /auth relative path. A hostname of
+      # http://localhost:9080 (no path) makes discovery advertise
+      # issuer=http://localhost:9080/realms/jhipster, which Spring Security 5.4
+      # ClientRegistrations rejects against issuer-uri
+      # http://localhost:9080/auth/realms/jhipster (IllegalStateException).
+      # Scheme is http so Cypress/Spring are not sent to https://localhost:9080.
+      - KC_HOSTNAME=http://localhost:9080/auth
       - KC_HOSTNAME_STRICT=false
       - KC_HTTP_ENABLED=true
     ports:

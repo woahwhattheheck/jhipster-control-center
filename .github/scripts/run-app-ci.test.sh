@@ -89,10 +89,10 @@ else
   fail "keycloak.yml must not use the removed jboss/keycloak image"
 fi
 
-if grep -q 'KC_HOSTNAME=http://localhost:9080' "$KC"; then
-  pass "keycloak.yml pins KC_HOSTNAME to http://localhost:9080 so OIDC redirects stay on the host"
+if grep -q 'KC_HOSTNAME=http://localhost:9080/auth' "$KC"; then
+  pass "keycloak.yml pins KC_HOSTNAME to http://localhost:9080/auth so the OIDC issuer includes /auth"
 else
-  fail "keycloak.yml must set KC_HOSTNAME=http://localhost:9080 (https or container hostname breaks Cypress cy.request)"
+  fail "keycloak.yml must set KC_HOSTNAME=http://localhost:9080/auth (Spring issuer-uri is http://localhost:9080/auth/realms/jhipster; omitting /auth fails ClientRegistrations)"
 fi
 
 SPA="$ROOT/src/main/java/tech/jhipster/controlcenter/web/filter/SpaWebFilter.java"
@@ -204,11 +204,16 @@ else
 fi
 
 # oauth2 jobs must wait for Keycloak OIDC before launching Java.
-# oauth2 jobs must wait for Keycloak OIDC before launching Java.
 if grep -q 'wait_for_http' "$SCRIPT" && grep -q 'openid-configuration' "$SCRIPT"; then
   pass "run-app-ci.sh waits for Keycloak OIDC discovery before Java"
 else
   fail "run-app-ci.sh must wait_for_http the Keycloak openid-configuration URL"
+fi
+
+if grep -q 'EXPECTED_ISSUER="http://localhost:9080/auth/realms/jhipster"' "$SCRIPT" && grep -q 'OIDC issuer mismatch' "$SCRIPT"; then
+  pass "run-app-ci.sh fail-closes when Keycloak advertises an issuer without /auth"
+else
+  fail "run-app-ci.sh must compare discovery.issuer to http://localhost:9080/auth/realms/jhipster"
 fi
 
 if grep -q 'wait_for_http "http://localhost:7419/"' "$SCRIPT" && grep -q 'oauth2/authorization/oidc' "$SCRIPT"; then
@@ -240,6 +245,8 @@ BIN
 write_exec "$OAUTH_BIN/curl" <<'BIN'
 #!/bin/bash
 echo "curl $*" >> "$FAKE_LOG"
+# wait_for_http only checks exit 0; the issuer probe parses this JSON.
+echo '{"issuer":"http://localhost:9080/auth/realms/jhipster"}'
 exit 0
 BIN
 write_exec "$OAUTH_BIN/java" <<'BIN'
@@ -276,6 +283,25 @@ if [[ $oauth_status -ne 0 ]] && ! grep -q '^java-ran ' "$FAKE_LOG"; then
   pass "oauth2 path fails closed when Keycloak OIDC never becomes ready (status=$oauth_status)"
 else
   fail "oauth2 path started java without OIDC; status=$oauth_status log=$(cat "$FAKE_LOG")"
+fi
+
+# Issuer without /auth must fail before Java (the 630653f CI failure).
+write_exec "$OAUTH_BIN/curl" <<'BIN'
+#!/bin/bash
+echo "curl $*" >> "$FAKE_LOG"
+echo '{"issuer":"http://localhost:9080/realms/jhipster"}'
+exit 0
+BIN
+: > "$FAKE_LOG"
+set +e
+PATH="$OAUTH_BIN:/usr/bin:/bin" JHI_APP=jhcc-static-oauth2 JHI_PROFILE='dev, api-docs, static, oauth2' \
+  bash "$SCRIPT" >/dev/null 2>&1
+issuer_status=$?
+set -e
+if [[ $issuer_status -ne 0 ]] && ! grep -q '^java-ran ' "$FAKE_LOG"; then
+  pass "oauth2 path fails closed when discovery issuer omits /auth (status=$issuer_status)"
+else
+  fail "oauth2 path started java with a mismatched issuer; status=$issuer_status log=$(cat "$FAKE_LOG")"
 fi
 
 echo
