@@ -1,0 +1,62 @@
+name: typescript compatibility matrix
+
+on:
+    workflow_dispatch:
+
+jobs:
+    ts:
+        name: "typescript ${{ matrix.ts }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        strategy:
+            fail-fast: false
+            matrix:
+                ts: ['as-locked', '4.3.5', '4.9.5']
+        steps:
+            - name: Check out upstream main
+              uses: actions/checkout@v4
+              with:
+                  ref: a8e84d3addc29075849bc43b31e0e656b8a09926
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '14.16.0'
+
+            - name: Install
+              run: npm ci --no-audit --no-fund 2>&1 | tail -3
+
+            - name: Apply the vue-loader fix from PR 230 in every leg
+              run: npm install --no-save --no-audit --no-fund vue-loader@15.11.1 2>&1 | tail -3
+
+            - name: Optionally change TypeScript
+              if: matrix.ts != 'as-locked'
+              run: npm install --no-save --no-audit --no-fund typescript@${{ matrix.ts }} 2>&1 | tail -3
+
+            - name: Versions in play
+              run: |
+                  node -e "console.log('TS webpack    =', require('./node_modules/webpack/package.json').version)"
+                  node -e "console.log('TS vue-loader =', require('./node_modules/vue-loader/package.json').version)"
+                  node -e "console.log('TS typescript =', require('./node_modules/typescript/package.json').version)"
+
+            - name: Dev build (what PR 230 already fixes)
+              id: dev
+              continue-on-error: true
+              run: |
+                  set -o pipefail
+                  npm run webapp:build:dev > /tmp/dev.log 2>&1
+
+            - name: Prod build (the packaging step that still fails)
+              id: prod
+              continue-on-error: true
+              run: |
+                  set -o pipefail
+                  npm run webapp:build:prod > /tmp/prod.log 2>&1
+
+            - name: Results
+              if: always()
+              run: |
+                  echo "TSRESULT typescript=${{ matrix.ts }} dev=${{ steps.dev.outcome }} prod=${{ steps.prod.outcome }}"
+                  echo "--- prod error summary ---"
+                  grep -aE "^ERROR|TS[0-9]+:|compiled with" /tmp/prod.log 2>/dev/null | head -12 || echo "(no prod errors found)"
+                  echo "--- prod tail ---"
+                  tail -8 /tmp/prod.log 2>/dev/null || echo "(no prod log)"
