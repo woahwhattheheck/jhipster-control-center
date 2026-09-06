@@ -6,6 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import com.nimbusds.oauth2.sdk.as.AuthorizationServerEndpointMetadata;
 import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import java.net.URI;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import net.minidev.json.JSONArray;
+import net.minidev.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -13,17 +17,20 @@ import org.junit.jupiter.api.Test;
  * <a href="https://github.com/jhipster/jhipster-control-center/issues/174">#174</a>.
  *
  * <p>Keycloak 12 and later advertise an {@code mtls_endpoint_aliases} object in their OpenID
- * Connect discovery document. On the {@code com.nimbusds:oauth2-oidc-sdk} 7.x line,
- * {@code JSONObjectUtils.getGeneric} rejects that member with
- * {@code ParseException: Unexpected type of JSON object member with key mtls_endpoint_aliases},
- * which aborts {@code ClientRegistrations.fromIssuerLocation} and stops the control center from
- * starting against a modern Keycloak.
+ * Connect discovery document, and the control center fails to start against them with
+ * {@code ParseException: Unexpected type of JSON object member with key mtls_endpoint_aliases}.
  *
- * <p>The 7.x line reaches this build through the OAuth2 client starter: Spring Boot 2.3.1
- * manages {@code oauth2-oidc-sdk} 7.1.1, whereas the Boot 2.4.x generation used by the rest of
- * the application manages 8.36. These tests drive the exact SDK entry point named in the
- * reported stack trace and assert that {@code mtls_endpoint_aliases} is not merely tolerated but
- * parsed and retained.
+ * <p>The failure depends on <em>how</em> the document reaches Nimbus, not on the document
+ * itself. {@code ClientRegistrations} does not hand Nimbus the raw JSON text: it reads the
+ * discovery document into a {@code Map} with Jackson and then calls
+ * {@code OIDCProviderMetadata.parse(new JSONObject(map))}. That constructor copies only the top
+ * level, so the nested {@code mtls_endpoint_aliases} value stays a {@code java.util.LinkedHashMap}
+ * rather than becoming a {@code net.minidev.json.JSONObject}. Older {@code oauth2-oidc-sdk}
+ * releases require that nested member to be a {@code JSONObject} exactly and reject the map.
+ *
+ * <p>This is why parsing the same document from a {@code String} always succeeds — the SDK's own
+ * parser produces {@code JSONObject} for nested members — and why the test below deliberately
+ * reproduces the shallow-map shape instead.
  */
 class OidcMetadataMtlsAliasesTest {
 
@@ -33,40 +40,56 @@ class OidcMetadataMtlsAliasesTest {
 
     private static final String MTLS_AUTHORIZATION_ENDPOINT = ISSUER + "/protocol/openid-connect/auth/mtls";
 
+    private static JSONArray array(String... values) {
+        JSONArray array = new JSONArray();
+        for (String value : values) {
+            array.add(value);
+        }
+        return array;
+    }
+
     /**
-     * Builds a trimmed but valid Keycloak discovery document. Single quotes are used purely for
-     * readability and swapped for JSON double quotes before returning.
+     * Builds the discovery document the way {@code ClientRegistrations} presents it to Nimbus:
+     * a top-level {@link JSONObject} shallow-copied from a Jackson map, whose nested
+     * {@code mtls_endpoint_aliases} member is still a plain {@link LinkedHashMap}.
      *
      * @param withMtlsAliases whether to advertise the {@code mtls_endpoint_aliases} object.
      */
-    private static String keycloakDiscoveryDocument(boolean withMtlsAliases) {
-        StringBuilder json = new StringBuilder();
-        json.append("{");
-        json.append("'issuer': '").append(ISSUER).append("',");
-        json.append("'authorization_endpoint': '").append(ISSUER).append("/protocol/openid-connect/auth',");
-        json.append("'token_endpoint': '").append(ISSUER).append("/protocol/openid-connect/token',");
-        json.append("'jwks_uri': '").append(ISSUER).append("/protocol/openid-connect/certs',");
-        json.append("'response_types_supported': ['code', 'id_token', 'token id_token'],");
-        json.append("'subject_types_supported': ['public', 'pairwise'],");
-        json.append("'id_token_signing_alg_values_supported': ['RS256']");
+    private static JSONObject discoveryDocumentAsSpringSecurityBuildsIt(boolean withMtlsAliases) {
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("issuer", ISSUER);
+        document.put("authorization_endpoint", ISSUER + "/protocol/openid-connect/auth");
+        document.put("token_endpoint", ISSUER + "/protocol/openid-connect/token");
+        document.put("jwks_uri", ISSUER + "/protocol/openid-connect/certs");
+        document.put("response_types_supported", array("code", "id_token", "token id_token"));
+        document.put("subject_types_supported", array("public", "pairwise"));
+        document.put("id_token_signing_alg_values_supported", array("RS256"));
+
         if (withMtlsAliases) {
-            json.append(",'mtls_endpoint_aliases': {");
-            json.append("'token_endpoint': '").append(MTLS_TOKEN_ENDPOINT).append("',");
-            json.append("'authorization_endpoint': '").append(MTLS_AUTHORIZATION_ENDPOINT).append("'");
-            json.append("}");
+            Map<String, Object> aliases = new LinkedHashMap<>();
+            aliases.put("token_endpoint", MTLS_TOKEN_ENDPOINT);
+            aliases.put("authorization_endpoint", MTLS_AUTHORIZATION_ENDPOINT);
+            document.put("mtls_endpoint_aliases", aliases);
         }
-        json.append("}");
-        return json.toString().replace('\'', '"');
+
+        return new JSONObject(document);
     }
 
     @Test
-    void parsesDiscoveryDocumentContainingMtlsEndpointAliases() {
-        assertThatCode(() -> OIDCProviderMetadata.parse(keycloakDiscoveryDocument(true))).doesNotThrowAnyException();
+    void parsesMetadataWhenMtlsEndpointAliasesArrivesAsAPlainMap() {
+        JSONObject document = discoveryDocumentAsSpringSecurityBuildsIt(true);
+
+        assertThat(document.get("mtls_endpoint_aliases"))
+            .as("the nested member must stay a plain map to reproduce the reported failure")
+            .isInstanceOf(Map.class)
+            .isNotInstanceOf(JSONObject.class);
+
+        assertThatCode(() -> OIDCProviderMetadata.parse(document)).doesNotThrowAnyException();
     }
 
     @Test
     void retainsMtlsEndpointAliasesInsteadOfDiscardingThem() throws Exception {
-        OIDCProviderMetadata metadata = OIDCProviderMetadata.parse(keycloakDiscoveryDocument(true));
+        OIDCProviderMetadata metadata = OIDCProviderMetadata.parse(discoveryDocumentAsSpringSecurityBuildsIt(true));
 
         assertThat(metadata.getIssuer().getValue()).isEqualTo(ISSUER);
 
@@ -78,7 +101,7 @@ class OidcMetadataMtlsAliasesTest {
 
     @Test
     void stillParsesDiscoveryDocumentWithoutMtlsEndpointAliases() throws Exception {
-        OIDCProviderMetadata metadata = OIDCProviderMetadata.parse(keycloakDiscoveryDocument(false));
+        OIDCProviderMetadata metadata = OIDCProviderMetadata.parse(discoveryDocumentAsSpringSecurityBuildsIt(false));
 
         assertThat(metadata.getIssuer().getValue()).isEqualTo(ISSUER);
         assertThat(metadata.getMtlsEndpointAliases()).isNull();
