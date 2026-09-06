@@ -56,7 +56,6 @@
         <blockhound-junit-platform.version>1.0.4.RELEASE</blockhound-junit-platform.version>
         <archunit-junit5.version>0.15.0</archunit-junit5.version>
         <mapstruct.version>1.4.2.Final</mapstruct.version>
-        <oauth2-client.version>2.3.1.RELEASE</oauth2-client.version>
         <!-- Plugin versions -->
         <maven-clean-plugin.version>3.1.0</maven-clean-plugin.version>
         <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
@@ -288,7 +287,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
-            <version>${oauth2-client.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
