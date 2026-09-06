@@ -1,0 +1,69 @@
+name: Keycloak image migration probe (#174)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    migrate:
+        name: "quay keycloak:${{ matrix.tag }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        strategy:
+            fail-fast: false
+            matrix:
+                tag: ['22.0.5', '26.7.3']
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: d8664ee33600c303f0f25feebcb05b11c009fccb
+
+            - name: Confirm the current image is unpullable
+              run: |
+                  echo "--- current keycloak.yml image ---"
+                  grep -n "image:" src/main/docker/keycloak.yml
+                  if docker pull jboss/keycloak:11.0.1 >/dev/null 2>&1; then
+                    echo "CURRENT IMAGE: pullable"
+                  else
+                    echo "CURRENT IMAGE: UNPULLABLE (jboss/keycloak is gone from Docker Hub)"
+                  fi
+
+            - name: Start quay.io/keycloak/keycloak:${{ matrix.tag }} with the repo realm
+              run: |
+                  docker run -d --name kc \
+                    -p 9080:9080 \
+                    -v "$PWD/src/main/docker/realm-config:/opt/keycloak/data/import" \
+                    -e KEYCLOAK_ADMIN=admin \
+                    -e KEYCLOAK_ADMIN_PASSWORD=admin \
+                    -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+                    -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+                    quay.io/keycloak/keycloak:${{ matrix.tag }} \
+                    start-dev --http-port=9080 --http-relative-path=/auth --import-realm
+                  echo "container started"
+
+            - name: Wait for the jhipster realm to answer
+              run: |
+                  URL="http://localhost:9080/auth/realms/jhipster/.well-known/openid-configuration"
+                  for i in $(seq 1 60); do
+                    if curl -sf "$URL" -o /tmp/discovery.json; then
+                      echo "MIGRATION: realm answered after ${i} attempts at /auth path"
+                      exit 0
+                    fi
+                    sleep 5
+                  done
+                  echo "MIGRATION: realm did NOT answer"
+                  docker logs kc 2>&1 | tail -60
+                  exit 1
+
+            - name: Does it advertise mtls_endpoint_aliases?
+              run: |
+                  if grep -q "mtls_endpoint_aliases" /tmp/discovery.json; then
+                    echo "MIGRATION RESULT: mtls_endpoint_aliases PRESENT"
+                    python3 -c "import json;d=json.load(open('/tmp/discovery.json'));print(json.dumps(d['mtls_endpoint_aliases'],indent=2)[:500])"
+                  else
+                    echo "MIGRATION RESULT: mtls_endpoint_aliases ABSENT"
+                  fi
+                  python3 -c "import json;d=json.load(open('/tmp/discovery.json'));print('issuer =',d['issuer'])"
+
+            - name: Container log tail
+              if: always()
+              run: docker logs kc 2>&1 | tail -25 || true
