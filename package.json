@@ -164,7 +164,7 @@
     "tslint-config-prettier": "1.18.0",
     "tslint-eslint-rules": "5.4.0",
     "tslint-loader": "3.6.0",
-    "typescript": "4.1.5",
+    "typescript": "^4.3.5",
     "url-loader": "4.1.1",
     "vue-jest": "3.0.7",
     "vue-loader": "^15.11.1",
