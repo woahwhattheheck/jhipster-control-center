@@ -1,0 +1,132 @@
+name: Shallow-map parse probe (#174)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    probe:
+        name: "sdk=${{ matrix.sdk }} jose=${{ matrix.jose }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - sdk: '8.36.1'
+                      jose: '8.20.2'
+                    - sdk: '8.36.1'
+                      jose: '9.37.3'
+                    - sdk: '9.43.6'
+                      jose: '9.37.3'
+                    - sdk: '7.1.1'
+                      jose: '8.20.2'
+        steps:
+            - name: Set up JDK 11
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '11'
+
+            - name: Build the probe project
+              run: |
+                  set -e
+                  mkdir -p /tmp/p/src/test/java/probe
+                  cat > /tmp/p/pom.xml <<'POMEOF'
+                  <?xml version="1.0" encoding="UTF-8"?>
+                  <project xmlns="http://maven.apache.org/POM/4.0.0"
+                           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>probe</groupId>
+                      <artifactId>shallow-probe</artifactId>
+                      <version>1.0</version>
+                      <properties>
+                          <maven.compiler.source>11</maven.compiler.source>
+                          <maven.compiler.target>11</maven.compiler.target>
+                          <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+                      </properties>
+                      <dependencies>
+                          <dependency>
+                              <groupId>com.nimbusds</groupId>
+                              <artifactId>oauth2-oidc-sdk</artifactId>
+                              <version>SDK_VERSION</version>
+                          </dependency>
+                          <dependency>
+                              <groupId>com.nimbusds</groupId>
+                              <artifactId>nimbus-jose-jwt</artifactId>
+                              <version>JOSE_VERSION</version>
+                          </dependency>
+                          <dependency>
+                              <groupId>org.junit.jupiter</groupId>
+                              <artifactId>junit-jupiter</artifactId>
+                              <version>5.7.1</version>
+                              <scope>test</scope>
+                          </dependency>
+                      </dependencies>
+                      <build>
+                          <plugins>
+                              <plugin>
+                                  <groupId>org.apache.maven.plugins</groupId>
+                                  <artifactId>maven-surefire-plugin</artifactId>
+                                  <version>3.0.0-M5</version>
+                              </plugin>
+                          </plugins>
+                      </build>
+                  </project>
+                  POMEOF
+                  sed -i 's/^                  //' /tmp/p/pom.xml
+                  sed -i "s/SDK_VERSION/${{ matrix.sdk }}/; s/JOSE_VERSION/${{ matrix.jose }}/" /tmp/p/pom.xml
+
+                  cat > /tmp/p/src/test/java/probe/ShallowMapTest.java <<'JAVAEOF'
+                  package probe;
+
+                  import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
+                  import java.util.LinkedHashMap;
+                  import java.util.Map;
+                  import net.minidev.json.JSONArray;
+                  import net.minidev.json.JSONObject;
+                  import org.junit.jupiter.api.Test;
+
+                  public class ShallowMapTest {
+
+                      private static final String ISS = "https://kc.example.com/auth/realms/jhipster";
+
+                      private static JSONArray arr(String... v) {
+                          JSONArray a = new JSONArray();
+                          for (String s : v) a.add(s);
+                          return a;
+                      }
+
+                      /** Mirrors ClientRegistrations: a Jackson-shaped Map wrapped shallowly in JSONObject. */
+                      @Test
+                      public void shallowJsonObjectFromMap() {
+                          Map<String, Object> mtls = new LinkedHashMap<>();
+                          mtls.put("token_endpoint", ISS + "/protocol/openid-connect/token/mtls");
+
+                          Map<String, Object> doc = new LinkedHashMap<>();
+                          doc.put("issuer", ISS);
+                          doc.put("authorization_endpoint", ISS + "/protocol/openid-connect/auth");
+                          doc.put("token_endpoint", ISS + "/protocol/openid-connect/token");
+                          doc.put("jwks_uri", ISS + "/protocol/openid-connect/certs");
+                          doc.put("response_types_supported", arr("code"));
+                          doc.put("subject_types_supported", arr("public"));
+                          doc.put("id_token_signing_alg_values_supported", arr("RS256"));
+                          // nested member stays a plain LinkedHashMap, exactly as Jackson leaves it
+                          doc.put("mtls_endpoint_aliases", mtls);
+
+                          JSONObject shallow = new JSONObject(doc);
+                          System.out.println("PROBE nested class = " + shallow.get("mtls_endpoint_aliases").getClass().getName());
+                          try {
+                              OIDCProviderMetadata.parse(shallow);
+                              System.out.println("PROBE RESULT: PARSED-OK");
+                          } catch (Exception e) {
+                              System.out.println("PROBE RESULT: THREW " + e.getClass().getName() + ": " + e.getMessage());
+                          }
+                      }
+                  }
+                  JAVAEOF
+                  sed -i 's/^                  //' /tmp/p/src/test/java/probe/ShallowMapTest.java
+
+            - name: Run the shallow-map probe
+              working-directory: /tmp/p
+              run: mvn -B -ntp test | grep -E "PROBE|Tests run:" || true
