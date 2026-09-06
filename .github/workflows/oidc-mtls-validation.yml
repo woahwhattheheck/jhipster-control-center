@@ -12,13 +12,13 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         env:
-            PR_SHA: e2c4003d2614fa965a0eae8001d3384d35a14205
+            PR_SHA: d8664ee33600c303f0f25feebcb05b11c009fccb
             BASE_SHA: a8e84d3addc29075849bc43b31e0e656b8a09926
         steps:
             - name: Check out the exact PR #227 commit
               uses: actions/checkout@v4
               with:
-                  ref: e2c4003d2614fa965a0eae8001d3384d35a14205
+                  ref: d8664ee33600c303f0f25feebcb05b11c009fccb
                   fetch-depth: 0
 
             - name: Confirm the tested tree
