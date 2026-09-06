@@ -67,3 +67,5 @@ jobs:
                       before-tree.txt
                       after-tree.txt
                   if-no-files-found: warn
+
+# retrigger after enabling Actions on this fork
