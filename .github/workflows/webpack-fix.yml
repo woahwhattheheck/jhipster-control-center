@@ -1,0 +1,60 @@
+name: webpack vue-loader compatibility fix
+
+on:
+    workflow_dispatch:
+
+jobs:
+    fix:
+        name: "vue-loader ${{ matrix.loader }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 35
+        strategy:
+            fail-fast: false
+            matrix:
+                loader: ['as-locked', '15.11.1']
+        steps:
+            - name: Check out upstream main (no changes of mine)
+              uses: actions/checkout@v4
+              with:
+                  ref: a8e84d3addc29075849bc43b31e0e656b8a09926
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '14.16.0'
+
+            - name: Install dependencies
+              run: npm ci --no-audit --no-fund 2>&1 | tail -5
+
+            - name: Optionally upgrade vue-loader
+              if: matrix.loader != 'as-locked'
+              run: npm install --no-save --no-audit --no-fund vue-loader@${{ matrix.loader }} 2>&1 | tail -5
+
+            - name: Report the versions actually installed
+              run: |
+                  node -e "console.log('FIX webpack     =', require('./node_modules/webpack/package.json').version)"
+                  node -e "console.log('FIX vue-loader  =', require('./node_modules/vue-loader/package.json').version)"
+                  if [ -f node_modules/webpack/lib/rules/DescriptionDataMatcherRulePlugin.js ]; then
+                    echo "FIX DescriptionDataMatcherRulePlugin: PRESENT"
+                  else
+                    echo "FIX DescriptionDataMatcherRulePlugin: ABSENT"
+                  fi
+
+            - name: Run the real failing build, exit code not masked
+              id: build
+              continue-on-error: true
+              run: |
+                  set -o pipefail
+                  npm run webapp:build:dev > /tmp/build.log 2>&1
+                  echo "raw exit code: $?"
+
+            - name: Build outcome and error tail
+              if: always()
+              run: |
+                  echo "FIX build outcome with vue-loader ${{ matrix.loader }} -> ${{ steps.build.outcome }}"
+                  echo "--- last 25 lines ---"
+                  tail -25 /tmp/build.log || echo "(no build log)"
+                  if grep -q "DescriptionDataMatcherRulePlugin" /tmp/build.log 2>/dev/null; then
+                    echo "FIX VERDICT: still failing on DescriptionDataMatcherRulePlugin"
+                  else
+                    echo "FIX VERDICT: no DescriptionDataMatcherRulePlugin error"
+                  fi
