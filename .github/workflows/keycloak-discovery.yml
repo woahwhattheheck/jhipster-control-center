@@ -1,0 +1,68 @@
+name: Keycloak discovery probe (#174)
+
+on:
+    workflow_dispatch:
+
+jobs:
+    discovery:
+        name: "keycloak:${{ matrix.tag }}"
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        strategy:
+            fail-fast: false
+            matrix:
+                tag: ['11.0.1', '15.0.2']
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: d8664ee33600c303f0f25feebcb05b11c009fccb
+
+            - name: Start Keycloak ${{ matrix.tag }} with the repo's realm-config
+              run: |
+                  docker run -d --name kc \
+                    -p 9080:9080 \
+                    -v "$PWD/src/main/docker/realm-config:/opt/jboss/keycloak/realm-config" \
+                    -e KEYCLOAK_USER=admin \
+                    -e KEYCLOAK_PASSWORD=admin \
+                    -e DB_VENDOR=h2 \
+                    jboss/keycloak:${{ matrix.tag }} \
+                    -b 0.0.0.0 \
+                    -Dkeycloak.migration.action=import \
+                    -Dkeycloak.migration.provider=dir \
+                    -Dkeycloak.migration.dir=/opt/jboss/keycloak/realm-config \
+                    -Dkeycloak.migration.strategy=OVERWRITE_EXISTING \
+                    -Djboss.socket.binding.port-offset=1000
+                  echo "container started"
+
+            - name: Wait for the jhipster realm to answer
+              id: wait
+              run: |
+                  URL="http://localhost:9080/auth/realms/jhipster/.well-known/openid-configuration"
+                  for i in $(seq 1 60); do
+                    if curl -sf "$URL" -o /tmp/discovery.json; then
+                      echo "realm answered after ${i} attempts"
+                      echo "ready=yes" >> "$GITHUB_OUTPUT"
+                      exit 0
+                    fi
+                    sleep 5
+                  done
+                  echo "ready=no" >> "$GITHUB_OUTPUT"
+                  echo "realm did not answer in time"
+                  docker logs kc 2>&1 | tail -40
+                  exit 1
+
+            - name: Does this Keycloak advertise mtls_endpoint_aliases?
+              run: |
+                  echo "=== keycloak:${{ matrix.tag }} ==="
+                  if grep -q "mtls_endpoint_aliases" /tmp/discovery.json; then
+                    echo "PROBE RESULT: mtls_endpoint_aliases PRESENT"
+                    python3 -c "import json;d=json.load(open('/tmp/discovery.json'));print(json.dumps(d['mtls_endpoint_aliases'],indent=2)[:600])"
+                  else
+                    echo "PROBE RESULT: mtls_endpoint_aliases ABSENT"
+                  fi
+                  echo "--- keys advertised ---"
+                  python3 -c "import json;print(sorted(json.load(open('/tmp/discovery.json')).keys()))" | tr ',' '\n' | head -40
+
+            - name: Container log tail
+              if: always()
+              run: docker logs kc 2>&1 | tail -20 || true
