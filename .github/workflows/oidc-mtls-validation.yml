@@ -1,0 +1,80 @@
+name: OIDC mtls_endpoint_aliases validation (#174)
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        paths: ['.github/workflows/oidc-mtls-validation.yml']
+
+jobs:
+    validate:
+        name: parse mtls_endpoint_aliases before/after the fix
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        env:
+            PR_SHA: e2c4003d2614fa965a0eae8001d3384d35a14205
+            BASE_SHA: a8e84d3addc29075849bc43b31e0e656b8a09926
+        steps:
+            - name: Check out the exact PR #227 commit
+              uses: actions/checkout@v4
+              with:
+                  ref: e2c4003d2614fa965a0eae8001d3384d35a14205
+                  fetch-depth: 0
+
+            - name: Confirm the tested tree
+              run: |
+                  echo "HEAD: $(git rev-parse HEAD)"
+                  echo "--- oauth2-client override should be ABSENT here ---"
+                  grep -n "oauth2-client.version" pom.xml || echo "override absent (expected)"
+                  ls -l src/test/java/tech/jhipster/controlcenter/config/OidcMetadataMtlsAliasesTest.java
+
+            - name: Set up JDK 11
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '11'
+
+            - name: Make the wrapper executable
+              run: chmod +x mvnw
+
+            - name: AFTER - resolved Nimbus artifacts (patched pom)
+              run: |
+                  ./mvnw -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=after-tree.txt --batch-mode
+                  echo "--- com.nimbusds resolved AFTER the fix ---"
+                  grep -i nimbusds after-tree.txt || echo "(none reported)"
+
+            - name: AFTER - run OidcMetadataMtlsAliasesTest (expected PASS)
+              run: ./mvnw -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest -DfailIfNoTests=true --batch-mode
+
+            - name: Restore the unpatched pom from upstream main
+              run: |
+                  git checkout "$BASE_SHA" -- pom.xml
+                  echo "--- override should be BACK now ---"
+                  grep -n "oauth2-client.version" pom.xml || echo "(override not found)"
+
+            - name: BEFORE - resolved Nimbus artifacts (unpatched pom)
+              run: |
+                  ./mvnw -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=before-tree.txt --batch-mode
+                  echo "--- com.nimbusds resolved BEFORE the fix ---"
+                  grep -i nimbusds before-tree.txt || echo "(none reported)"
+
+            - name: BEFORE - run OidcMetadataMtlsAliasesTest (expected FAIL)
+              id: before_test
+              continue-on-error: true
+              run: ./mvnw -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest -DfailIfNoTests=true --batch-mode
+
+            - name: Summary
+              run: |
+                  echo "BEFORE (unpatched pom) outcome: ${{ steps.before_test.outcome }}"
+                  echo "===== BEFORE tree ====="; cat before-tree.txt || true
+                  echo "===== AFTER tree =====";  cat after-tree.txt  || true
+
+            - name: Upload dependency trees
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: nimbus-dependency-trees
+                  path: |
+                      before-tree.txt
+                      after-tree.txt
+                  if-no-files-found: warn
