@@ -39,12 +39,12 @@ jobs:
 
             - name: AFTER - resolved Nimbus artifacts (patched pom)
               run: |
-                  ./mvnw -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=after-tree.txt --batch-mode
+                  mvn -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=after-tree.txt --batch-mode
                   echo "--- com.nimbusds resolved AFTER the fix ---"
                   grep -i nimbusds after-tree.txt || echo "(none reported)"
 
             - name: AFTER - run OidcMetadataMtlsAliasesTest (expected PASS)
-              run: ./mvnw -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest -DfailIfNoTests=true --batch-mode
+              run: mvn -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest -DfailIfNoTests=true --batch-mode
 
             - name: Restore the unpatched pom from upstream main
               run: |
@@ -54,14 +54,14 @@ jobs:
 
             - name: BEFORE - resolved Nimbus artifacts (unpatched pom)
               run: |
-                  ./mvnw -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=before-tree.txt --batch-mode
+                  mvn -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=before-tree.txt --batch-mode
                   echo "--- com.nimbusds resolved BEFORE the fix ---"
                   grep -i nimbusds before-tree.txt || echo "(none reported)"
 
             - name: BEFORE - run OidcMetadataMtlsAliasesTest (expected FAIL)
               id: before_test
               continue-on-error: true
-              run: ./mvnw -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest -DfailIfNoTests=true --batch-mode
+              run: mvn -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest -DfailIfNoTests=true --batch-mode
 
             - name: Summary
               run: |
