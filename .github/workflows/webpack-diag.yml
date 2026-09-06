@@ -56,4 +56,5 @@ jobs:
 
             - name: Outcome
               if: always()
-              run: echo "DIAG build outcome with ${{ matrix.method }}: ${{ steps.build.outcome }}"
+              run: |
+                  echo "DIAG build outcome with ${{ matrix.method }} -> ${{ steps.build.outcome }}"
