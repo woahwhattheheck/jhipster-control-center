@@ -42,6 +42,8 @@ jobs:
             JHI_SCRIPTS: ./.github/scripts
         steps:
             - uses: actions/checkout@v2
+            - name: Check compose launcher
+              run: bash .github/scripts/run-app-ci.test.sh
             - uses: actions/setup-node@v1
               with:
                   node-version: ${{ matrix.node_version }}
@@ -68,6 +70,9 @@ jobs:
                 browser: chrome
                 headless: true
                 project: ./
+            - name: Dump application log
+              if: failure()
+              run: tail -n 200 target/jhipster-control-center.log || true
             - name: Sonar analysis
               if: github.repository == 'jhipster/jhipster-control-center' && github.ref == 'refs/heads/main'
               run: |

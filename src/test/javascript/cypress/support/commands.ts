@@ -67,7 +67,11 @@ Cypress.Commands.add('login', (username: string, password: string) => {
 });
 
 Cypress.Commands.add('getProfiles', () => {
-  cy.window().its('app.$store.getters.activeProfiles');
+  // account-store initializes activeProfiles as '' before /management/info returns.
+  // Retry until the array is committed so oauth2 specs skip (or log in) on the real profile.
+  cy.window()
+    .its('app.$store.getters.activeProfiles')
+    .should('be.an', 'array');
 });
 
 Cypress.Commands.add('skipSpec', () => {

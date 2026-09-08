@@ -15,12 +15,16 @@ describe('/sidebar', () => {
       win.sessionStorage.clear();
     });
     cy.clearCookies();
-    cy.visit('');
-    cy.getProfiles().then((activeProfiles: Array<string>) => {
+    // Do not visit the SPA before oauth2 login. home/navbar login() assigns
+    // window.location to /oauth2/authorization/oidc; Cypress 6 then hangs 30s
+    // on cy.request to that path even though curl gets 302 immediately.
+    cy.request('http://127.0.0.1:7419/management/info').then(resp => {
+      const activeProfiles: Array<string> = (resp.body && resp.body.activeProfiles) || [];
       if (activeProfiles.includes('oauth2')) {
         Cypress.env('oauth2', true);
       } else {
         Cypress.env('oauth2', false);
+        cy.visit('');
         cy.login('admin', 'admin');
       }
     });
