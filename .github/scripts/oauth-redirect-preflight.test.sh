@@ -38,7 +38,9 @@ write_exec "$FAKEBIN/curl" <<'BIN'
 #!/bin/bash
 for arg in "$@"; do
     if [[ "$arg" == *"/oauth2/authorization/oidc" ]]; then
-        printf '%s' "${AUTH_STATUS:-302}"
+        printf '%s\n%s' \
+            "${AUTH_STATUS:-302}" \
+            "${AUTH_LOCATION:-http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
         exit 0
     fi
 done
@@ -48,11 +50,13 @@ BIN
 
 run_case() {
     local status="$1"
+    local location="${2-http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
     set +e
     (
         cd "$ROOT"
         PATH="$FAKEBIN:/usr/bin:/bin" \
             AUTH_STATUS="$status" \
+            AUTH_LOCATION="$location" \
             WAIT_FOR_HTTP_TIMEOUT=2 \
             JHI_APP=jhcc-static-oauth2 \
             JHI_PROFILE='dev, api-docs, static, oauth2' \
@@ -64,7 +68,15 @@ run_case() {
 }
 
 [[ "$(run_case 302)" == "0" ]] || {
-    echo "302 authorization redirect should pass preflight" >&2
+    echo "302 authorization redirect to Keycloak should pass preflight" >&2
+    exit 1
+}
+[[ "$(run_case 302 '')" != "0" ]] || {
+    echo "302 response without Location must fail preflight" >&2
+    exit 1
+}
+[[ "$(run_case 302 'http://localhost:9080/not-the-authorization-endpoint')" != "0" ]] || {
+    echo "302 response to an unrelated target must fail preflight" >&2
     exit 1
 }
 [[ "$(run_case 500)" != "0" ]] || {
@@ -76,4 +88,4 @@ run_case() {
     exit 1
 }
 
-echo "oauth redirect preflight: 302 passes; 200/500 fail"
+echo "oauth redirect preflight: valid Keycloak 302 passes; missing/unrelated Location and 200/500 fail"
