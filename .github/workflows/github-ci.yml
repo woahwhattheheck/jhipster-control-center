@@ -43,7 +43,9 @@ jobs:
         steps:
             - uses: actions/checkout@v2
             - name: Check compose launcher
-              run: bash .github/scripts/run-app-ci.test.sh
+              run: |
+                  bash .github/scripts/run-app-ci.test.sh
+                  bash .github/scripts/oauth-redirect-preflight.test.sh
             - uses: actions/setup-node@v1
               with:
                   node-version: ${{ matrix.node_version }}
