@@ -4,7 +4,9 @@ on:
     workflow_dispatch:
     push:
         branches: [main]
-        paths: ['.github/workflows/oidc-mtls-validation.yml']
+        paths:
+            - '.github/workflows/oidc-mtls-validation.yml'
+            - '.github/workflows/cr-validation.yml'
 
 jobs:
     validate:
@@ -68,6 +70,13 @@ jobs:
                   echo "BEFORE (unpatched pom) outcome: ${{ steps.before_test.outcome }}"
                   echo "===== BEFORE tree ====="; cat before-tree.txt || true
                   echo "===== AFTER tree =====";  cat after-tree.txt  || true
+
+            - name: Require the unpatched control to reproduce the regression
+              run: |
+                  if [ "${{ steps.before_test.outcome }}" != "failure" ]; then
+                    echo "::error::Expected the unpatched control to fail; got ${{ steps.before_test.outcome }}"
+                    exit 1
+                  fi
 
             - name: Upload dependency trees
               if: always()
