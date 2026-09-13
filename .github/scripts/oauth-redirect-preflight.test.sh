@@ -40,7 +40,7 @@ for arg in "$@"; do
     if [[ "$arg" == *"/oauth2/authorization/oidc" ]]; then
         printf '%s\n%s' \
             "${AUTH_STATUS:-302}" \
-            "${AUTH_LOCATION:-http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
+            "${AUTH_LOCATION-http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
         exit 0
     fi
 done
