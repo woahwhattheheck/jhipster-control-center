@@ -6,11 +6,16 @@ on:
     branches:
       - main
 
+# Release Drafter updates the repository's draft release and reads merged PRs.
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     steps:
       # Drafts your next Release notes as Pull Requests are merged into "main"
-      - uses: release-drafter/release-drafter@v5
+      - uses: release-drafter/release-drafter@09c613e259eb8d4e7c81c2cb00618eb5fc4575a7 # v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
