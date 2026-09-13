@@ -57,19 +57,28 @@ java \
 wait_for_http "http://localhost:7419/" "${WAIT_FOR_HTTP_TIMEOUT:-120}"
 if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
     echo "=== GET /oauth2/authorization/oidc ==="
-    if ! auth_status="$(
+    if ! auth_probe="$(
         curl -sS --max-time 8 --max-redirs 0 -o /dev/null \
-            -w "%{http_code}" \
+            -w $'%{http_code}\n%{redirect_url}' \
             "http://localhost:7419/oauth2/authorization/oidc"
     )"; then
         echo "oauth2 authorization endpoint did not respond" >&2
         tail -120 target/jhipster-control-center.log >&2 || true
         exit 1
     fi
+    auth_status="${auth_probe%%$'\n'*}"
+    auth_location="${auth_probe#*$'\n'}"
     if [[ "$auth_status" != "302" ]]; then
         echo "oauth2 authorization endpoint returned HTTP ${auth_status}; expected 302" >&2
         tail -120 target/jhipster-control-center.log >&2 || true
         exit 1
     fi
-    echo "oauth2 authorization redirect status=${auth_status}"
+    expected_auth_location="${EXPECTED_ISSUER}/protocol/openid-connect/auth"
+    auth_location_base="${auth_location%%\?*}"
+    if [[ -z "$auth_location" || "$auth_location_base" != "$expected_auth_location" ]]; then
+        echo "oauth2 authorization endpoint returned an invalid redirect target; expected Keycloak authorization endpoint" >&2
+        tail -120 target/jhipster-control-center.log >&2 || true
+        exit 1
+    fi
+    echo "oauth2 authorization redirect status=${auth_status} target=keycloak"
 fi
