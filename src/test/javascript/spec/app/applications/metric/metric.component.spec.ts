@@ -84,8 +84,8 @@ describe('Metrics Component', () => {
     await metricToTestMounted.$nextTick();
     expect(subscribeRouteChanged).toHaveBeenCalled();
     expect(metricToTestMounted.activeRoute).toBe(jhcc_route);
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/jhimetrics/');
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/threaddump/');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/jhimetrics');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/threaddump');
     expect(metricToTestMounted.metrics).toHaveProperty('jvm');
     expect(metricToTestMounted.metrics).toEqual(jhcc_metrics);
     expect(metricToTestMounted.threadStats).toEqual({

@@ -92,7 +92,7 @@ describe('Loggers Component', () => {
     await loggers.$nextTick();
     expect(changeLoggersLevel).toHaveBeenCalled();
     expect(mockedAxios.post).toHaveBeenCalledWith('/management/loggers/main', { configuredLevel: 'ERROR' });
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/loggers/');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/loggers');
     expect(refreshReload).toHaveBeenCalled();
     refreshReload.mockRestore();
     changeLoggersLevel.mockRestore();
@@ -110,7 +110,7 @@ describe('Loggers Component', () => {
     await loggers.$nextTick();
     expect(spy).toHaveBeenCalled();
     expect(loggers.loggers).toStrictEqual(jhcc_logs);
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/loggers/');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/loggers');
     spy.mockRestore();
   });
 });
