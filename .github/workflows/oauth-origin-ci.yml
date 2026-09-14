@@ -1,0 +1,22 @@
+name: OAuth browser origin regression
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/run-app-ci.sh'
+      - '.github/scripts/oauth-origin-ci.test.sh'
+      - '.github/workflows/oauth-origin-ci.yml'
+  push:
+    paths:
+      - '.github/scripts/run-app-ci.sh'
+      - '.github/scripts/oauth-origin-ci.test.sh'
+      - '.github/workflows/oauth-origin-ci.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify OAuth browser origin contract
+        run: bash .github/scripts/oauth-origin-ci.test.sh

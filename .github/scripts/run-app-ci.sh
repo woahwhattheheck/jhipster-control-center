@@ -49,20 +49,23 @@ fi
 
 # Cypress performs its Keycloak bootstrap through 127.0.0.1 so Node does not
 # hang on localhost resolution, and its synthetic login stores the Keycloak
-# session plus redirect URI on that same origin. Spring otherwise derives the
-# callback from Docker's host gateway (172.17.0.1), which Keycloak rejects.
-# Keep the override CI-only and preserve one IPv4 origin through login/callback;
-# product configuration remains free to derive its public callback normally.
-OAUTH_REDIRECT_ARGS=()
+# session on that same browser origin. Keep discovery and token/JWK traffic on
+# localhost for Spring's server-side OIDC client, but pin both browser-visible
+# hops to 127.0.0.1: the authorization endpoint and the callback. Otherwise the
+# browser visits localhost:9080 without the session cookie created for
+# 127.0.0.1:9080 and all hosted OAuth cells fail at the login boundary.
+# Product configuration remains free to derive its public endpoints normally.
+OAUTH_CI_ARGS=()
 if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
-    OAUTH_REDIRECT_ARGS+=("--spring.security.oauth2.client.registration.oidc.redirect-uri=http://127.0.0.1:7419/login/oauth2/code/oidc")
+    OAUTH_CI_ARGS+=("--spring.security.oauth2.client.provider.oidc.authorization-uri=http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth")
+    OAUTH_CI_ARGS+=("--spring.security.oauth2.client.registration.oidc.redirect-uri=http://127.0.0.1:7419/login/oauth2/code/oidc")
 fi
 
 java \
     -jar ./target/jhipster-control-center-*.jar \
     jhipster-control-center-*.jar \
     --spring.profiles.active="${JHI_PROFILE:-}" \
-    "${OAUTH_REDIRECT_ARGS[@]}" &
+    "${OAUTH_CI_ARGS[@]}" &
 
 # Cypress only verifies :7419 when the e2e step starts. Fail here if the
 # process never binds, and (oauth2) if the authorization redirect hangs.
