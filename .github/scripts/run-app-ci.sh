@@ -47,15 +47,15 @@ fi
 # Run the application
 #-------------------------------------------------------------------------------
 
-# Cypress may reach the app through Docker's host gateway even though the
-# browser-facing test origin is localhost. Spring derives OAuth callback URIs
-# from the incoming Host header by default, which makes Keycloak reject an
-# otherwise-correct CI login as invalid_redirect_uri. Keep this override local
-# to OAuth CI jobs: the imported realm already trusts localhost, while product
-# configuration remains free to derive its public callback normally.
+# Cypress performs its Keycloak bootstrap through 127.0.0.1 so Node does not
+# hang on localhost resolution, and its synthetic login stores the Keycloak
+# session plus redirect URI on that same origin. Spring otherwise derives the
+# callback from Docker's host gateway (172.17.0.1), which Keycloak rejects.
+# Keep the override CI-only and preserve one IPv4 origin through login/callback;
+# product configuration remains free to derive its public callback normally.
 OAUTH_REDIRECT_ARGS=()
 if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
-    OAUTH_REDIRECT_ARGS+=("--spring.security.oauth2.client.registration.oidc.redirect-uri=http://localhost:7419/login/oauth2/code/oidc")
+    OAUTH_REDIRECT_ARGS+=("--spring.security.oauth2.client.registration.oidc.redirect-uri=http://127.0.0.1:7419/login/oauth2/code/oidc")
 fi
 
 java \
