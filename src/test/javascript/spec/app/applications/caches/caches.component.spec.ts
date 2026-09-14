@@ -70,8 +70,8 @@ describe('Caches Component', () => {
     expect(subscribeRouteChanged).toHaveBeenCalled();
     expect(subscribeRoutesChanged).toHaveBeenCalled();
     expect(cachesToTestMounted.activeRoute).toBe(jhcc_route);
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/caches/');
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/jhimetrics/');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/caches');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/jhimetrics');
     expect(cachesToTestMounted.cachesMetrics).toEqual(jhcc_metrics_caches);
     expect(cachesToTestMounted.caches).toEqual(jhcc_caches);
   });

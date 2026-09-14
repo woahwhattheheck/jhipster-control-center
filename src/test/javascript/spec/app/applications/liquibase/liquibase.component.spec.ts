@@ -78,7 +78,7 @@ describe('liquibase component', () => {
     expect(subscribeRouteChanged).toHaveBeenCalled();
     expect(subscribeRoutesChanged).toHaveBeenCalled();
     expect(liquibaseToTestMounted.activeRoute).toBe(jhcc_route);
-    expect(mockedAxios.get).toHaveBeenCalledWith('/management/liquibase/');
+    expect(mockedAxios.get).toHaveBeenCalledWith('/management/liquibase');
     expect(liquibaseToTestMounted.changeSets).toEqual(jhcc_liquibase_changesets);
   });
 
