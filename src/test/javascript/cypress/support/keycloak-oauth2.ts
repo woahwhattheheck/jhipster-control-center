@@ -14,10 +14,6 @@ function appOrigin(): string {
   return (Cypress.config('baseUrl') || 'http://localhost:7419/').replace('localhost', '127.0.0.1').replace(/\/$/, '');
 }
 
-function ipv4(urlOrOrigin: string): string {
-  return urlOrOrigin.replace('://localhost', '://127.0.0.1');
-}
-
 Cypress.Commands.add('getOauth2Data', () => {
   const url = `${appOrigin()}/oauth2/authorization/oidc`;
   cy.exec(`curl -sS --max-time 10 --max-redirs 0 -D - -o /dev/null "${url}"`, { failOnNonZeroExit: true }).then(result => {
@@ -29,10 +25,9 @@ Cypress.Commands.add('getOauth2Data', () => {
     const realmMatch = /\/realms\/([^/]+)/.exec(location.pathname);
     const realm = realmMatch ? realmMatch[1] : location.pathname.split('/')[3];
     const clientId = location.searchParams.get('client_id');
-    const origin = ipv4(location.origin);
     const data = {
       url: location,
-      realmPath: `${origin}/auth/realms/${realm}`,
+      realmPath: `${location.origin}${location.pathname.split('/protocol/')[0]}`,
       realm,
       clientId,
     };
@@ -44,23 +39,25 @@ Cypress.Commands.add('keycloackLogin', (oauth2Data: any, user: string) => {
   Cypress.log({ name: 'Login' });
 
   cy.fixture(`users/${user}`).then(userData => {
+    // Preserve Keycloak's advertised hostname and the application's complete
+    // authorization request. Rewriting localhost to 127.0.0.1 splits the
+    // login cookies from the browser session; a redirect is not a login form.
+    const authorizationUrl = new URL(oauth2Data.url.toString());
+    authorizationUrl.searchParams.set('prompt', 'login');
     cy.request({
-      url: `${oauth2Data.realmPath}/protocol/openid-connect/auth`,
-      followRedirect: false,
-      qs: {
-        scope: 'openid',
-        response_type: 'code',
-        approval_prompt: 'auto',
-        redirect_uri: ipv4(String(Cypress.config('baseUrl'))),
-        client_id: oauth2Data.clientId,
-      },
+      url: authorizationUrl.toString(),
+      followRedirect: true,
     })
       .then(response => {
         const html = document.createElement('html');
         html.innerHTML = response.body;
 
-        const form = html.getElementsByTagName('form')[0];
-        const url = ipv4(form.action);
+        const form = html.querySelector('form#kc-form-login');
+        const action = form && form.getAttribute('action');
+        if (response.status !== 200 || !action) {
+          throw new Error(`Keycloak did not return a login form (HTTP ${response.status})`);
+        }
+        const url = new URL(action, authorizationUrl.toString()).toString();
 
         return cy.request({
           method: 'POST',
@@ -73,7 +70,10 @@ Cypress.Commands.add('keycloackLogin', (oauth2Data: any, user: string) => {
           },
         });
       })
-      .then(() => {
+      .then(response => {
+        if (response.status !== 302 || !response.headers.location) {
+          throw new Error(`Keycloak did not accept the login (HTTP ${response.status})`);
+        }
         // Chrome follows the 302 through Keycloak using the session from the
         // form POST (cy.request cookies are visible to cy.visit). cy.request
         // followRedirect:true on this URL is the 30s hang.

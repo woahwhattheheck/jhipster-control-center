@@ -266,6 +266,14 @@ BIN
 write_exec "$OAUTH_BIN/curl" <<'BIN'
 #!/bin/bash
 echo "curl $*" >> "$FAKE_LOG"
+for arg in "$@"; do
+  if [[ "$arg" == *"/oauth2/authorization/oidc" ]]; then
+    printf '%s\n%s' \
+      '302' \
+      'http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app'
+    exit 0
+  fi
+done
 # wait_for_http only checks exit 0; the issuer probe parses this JSON.
 echo '{"issuer":"http://localhost:9080/auth/realms/jhipster"}'
 exit 0
