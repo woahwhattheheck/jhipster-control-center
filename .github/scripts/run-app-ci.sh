@@ -34,6 +34,7 @@ if [[ "${JHI_APP:-}" == *"oauth2"* ]] && [[ -a src/main/docker/keycloak.yml ]]; 
     # Keycloak hostname v2 with KC_HOSTNAME=http://localhost:9080 (no /auth)
     # advertised issuer=http://localhost:9080/realms/jhipster and Java never bound.
     EXPECTED_ISSUER="http://localhost:9080/auth/realms/jhipster"
+    EXPECTED_AUTHORIZATION_ENDPOINT="http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth"
     issuer="$(curl -sf --max-time 5 "$OIDC_DISCOVERY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("issuer",""))')"
     if [[ "$issuer" != "$EXPECTED_ISSUER" ]]; then
         echo "OIDC issuer mismatch: got '${issuer}' want '${EXPECTED_ISSUER}'" >&2
@@ -57,7 +58,7 @@ fi
 # Product configuration remains free to derive its public endpoints normally.
 OAUTH_CI_ARGS=()
 if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
-    OAUTH_CI_ARGS+=("--spring.security.oauth2.client.provider.oidc.authorization-uri=http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth")
+    OAUTH_CI_ARGS+=("--spring.security.oauth2.client.provider.oidc.authorization-uri=${EXPECTED_AUTHORIZATION_ENDPOINT}")
     OAUTH_CI_ARGS+=("--spring.security.oauth2.client.registration.oidc.redirect-uri=http://127.0.0.1:7419/login/oauth2/code/oidc")
 fi
 
@@ -68,15 +69,31 @@ java \
     "${OAUTH_CI_ARGS[@]}" &
 
 # Cypress only verifies :7419 when the e2e step starts. Fail here if the
-# process never binds, and (oauth2) if the authorization redirect hangs.
+# process never binds, and (oauth2) if the authorization redirect is not real.
 wait_for_http "http://localhost:7419/" "${WAIT_FOR_HTTP_TIMEOUT:-120}"
 if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
-    echo "=== HEAD /oauth2/authorization/oidc ==="
-    if ! curl -sS --max-time 8 --max-redirs 0 -D - -o /dev/null \
-        -w "http_code=%{http_code} redirect=%{redirect_url}\n" \
-        "http://localhost:7419/oauth2/authorization/oidc"; then
+    echo "=== GET /oauth2/authorization/oidc ==="
+    if ! auth_probe="$(
+        curl -sS --max-time 8 --max-redirs 0 -o /dev/null \
+            -w $'%{http_code}\n%{redirect_url}' \
+            "http://localhost:7419/oauth2/authorization/oidc"
+    )"; then
         echo "oauth2 authorization endpoint did not respond" >&2
         tail -120 target/jhipster-control-center.log >&2 || true
         exit 1
     fi
+    auth_status="${auth_probe%%$'\n'*}"
+    auth_location="${auth_probe#*$'\n'}"
+    if [[ "$auth_status" != "302" ]]; then
+        echo "oauth2 authorization endpoint returned HTTP ${auth_status}; expected 302" >&2
+        tail -120 target/jhipster-control-center.log >&2 || true
+        exit 1
+    fi
+    auth_location_base="${auth_location%%\?*}"
+    if [[ -z "$auth_location" || "$auth_location_base" != "$EXPECTED_AUTHORIZATION_ENDPOINT" ]]; then
+        echo "oauth2 authorization endpoint returned an invalid redirect target; expected Cypress IPv4 Keycloak authorization endpoint" >&2
+        tail -120 target/jhipster-control-center.log >&2 || true
+        exit 1
+    fi
+    echo "oauth2 authorization redirect status=${auth_status} target=${auth_location_base}"
 fi
