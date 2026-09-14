@@ -85,7 +85,7 @@ if [[ "${JHI_APP:-}" == *"oauth2"* ]]; then
     auth_status="${auth_probe%%$'\n'*}"
     auth_location="${auth_probe#*$'\n'}"
     if [[ "$auth_status" != "302" ]]; then
-        echo "oauth2 authorization endpoint returned HTTP ${ath_status}; expected 302" >&2
+        echo "oauth2 authorization endpoint returned HTTP ${auth_status}; expected 302" >&2
         tail -120 target/jhipster-control-center.log >&2 || true
         exit 1
     fi

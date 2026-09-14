@@ -37,6 +37,13 @@ if grep -Fq -- '--spring.security.oauth2.client.provider.oidc.issuer-uri=http://
     fail "do not rewrite the issuer; Spring must retain the discovery issuer"
 fi
 
+if grep -Fq '${ath_status}' "$SCRIPT"; then
+    fail "authorization status diagnostics must use auth_status"
+fi
+
+grep -Fq 'returned HTTP ${auth_status}; expected 302' "$SCRIPT" \
+    || fail "authorization status diagnostics must report auth_status"
+
 python3 - "$SCRIPT" <<'PY'
 from pathlib import Path
 import sys
