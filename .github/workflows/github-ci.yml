@@ -1,5 +1,8 @@
 name: Application CI
-on: [push, pull_request]
+on:
+    push:
+        branches: [main]
+    pull_request:
 
 permissions:
     contents: read
@@ -64,6 +67,8 @@ jobs:
                   java-version: '11.x'
             - name: Install node.js packages
               run: npm install
+            - name: Check OAuth login helper
+              run: node .github/scripts/keycloak-oauth2.test.js
             - name: Run backend test
               run: |
                   chmod +x mvnw
