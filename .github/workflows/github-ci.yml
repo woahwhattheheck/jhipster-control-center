@@ -53,7 +53,9 @@ jobs:
               with:
                   persist-credentials: false
             - name: Check compose launcher
-              run: bash .github/scripts/run-app-ci.test.sh
+              run: |
+                  bash .github/scripts/run-app-ci.test.sh
+                  bash .github/scripts/oauth-redirect-preflight.test.sh
             - uses: actions/setup-node@f1f314fca9dfce2769ece7d933488f076716723e # v1
               with:
                   node-version: ${{ matrix.node_version }}
