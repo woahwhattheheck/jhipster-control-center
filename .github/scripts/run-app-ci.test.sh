@@ -270,7 +270,7 @@ for arg in "$@"; do
   if [[ "$arg" == *"/oauth2/authorization/oidc" ]]; then
     printf '%s\n%s' \
       '302' \
-      'http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app'
+      'http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app'
     exit 0
   fi
 done

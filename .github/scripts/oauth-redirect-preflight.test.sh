@@ -40,7 +40,7 @@ for arg in "$@"; do
     if [[ "$arg" == *"/oauth2/authorization/oidc" ]]; then
         printf '%s\n%s' \
             "${AUTH_STATUS:-302}" \
-            "${AUTH_LOCATION-http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
+            "${AUTH_LOCATION-http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
         exit 0
     fi
 done
@@ -50,7 +50,7 @@ BIN
 
 run_case() {
     local status="$1"
-    local location="${2-http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
+    local location="${2-http://127.0.0.1:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app}"
     set +e
     (
         cd "$ROOT"
@@ -68,15 +68,19 @@ run_case() {
 }
 
 [[ "$(run_case 302)" == "0" ]] || {
-    echo "302 authorization redirect to Keycloak should pass preflight" >&2
+    echo "302 authorization redirect to the Cypress IPv4 Keycloak endpoint should pass preflight" >&2
     exit 1
 }
 [[ "$(run_case 302 '')" != "0" ]] || {
     echo "302 response without Location must fail preflight" >&2
     exit 1
 }
-[[ "$(run_case 302 'http://localhost:9080/not-the-authorization-endpoint')" != "0" ]] || {
+[[ "$(run_case 302 'http://127.0.0.1:9080/not-the-authorization-endpoint')" != "0" ]] || {
     echo "302 response to an unrelated target must fail preflight" >&2
+    exit 1
+}
+[[ "$(run_case 302 'http://localhost:9080/auth/realms/jhipster/protocol/openid-connect/auth?client_id=web_app')" != "0" ]] || {
+    echo "browser authorization redirect must not drift back to the localhost issuer origin" >&2
     exit 1
 }
 [[ "$(run_case 500)" != "0" ]] || {
@@ -88,4 +92,4 @@ run_case() {
     exit 1
 }
 
-echo "oauth redirect preflight: valid Keycloak 302 passes; missing/unrelated Location and 200/500 fail"
+echo "oauth redirect preflight: valid IPv4 Keycloak 302 passes; missing/unrelated/localhost Location and 200/500 fail"
