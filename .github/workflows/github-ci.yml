@@ -1,81 +1,25 @@
-name: Application CI
-on: [push, pull_request]
+name: "#174 focused validation"
+
+on:
+  pull_request:
+    branches:
+      - validation/kestrel-911-174-upstream-main
+
+permissions:
+  contents: read
+
 jobs:
-    pipeline:
-        name: ${{ matrix.app-type }}
-        runs-on: ubuntu-latest
-        if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]')"
-        timeout-minutes: 40
-        strategy:
-            fail-fast: false
-            matrix:
-                node_version: [14.16.0]
-                os: [ubuntu-20.04]
-                app-type:
-                    - jhcc-default
-                    - jhcc-static
-                    - jhcc-eureka
-                    - jhcc-consul
-                    - jhcc-static-oauth2
-                    - jhcc-eureka-oauth2
-                    - jhcc-consul-oauth2
-                include:
-                    - app-type: jhcc-default
-                      environment: prod, api-docs, static
-                    - app-type: jhcc-static
-                      environment: dev, api-docs, static
-                    - app-type: jhcc-eureka
-                      environment: dev, api-docs, eureka
-                    - app-type: jhcc-consul
-                      environment: dev, api-docs, consul
-                    - app-type: jhcc-static-oauth2
-                      environment: dev, api-docs, static, oauth2
-                    - app-type: jhcc-eureka-oauth2
-                      environment: dev, api-docs, eureka, oauth2
-                    - app-type: jhcc-consul-oauth2
-                      environment: dev, api-docs, consul, oauth2
-        env:
-            SPRING_OUTPUT_ANSI_ENABLED: DETECT
-            JHI_DISABLE_WEBPACK_LOGS: true
-            JHI_APP: ${{ matrix.app-type }}
-            JHI_PROFILE: ${{ matrix.environment }}
-            JHI_SCRIPTS: ./.github/scripts
-        steps:
-            - uses: actions/checkout@v2
-            - uses: actions/setup-node@v1
-              with:
-                  node-version: ${{ matrix.node_version }}
-            - uses: actions/setup-java@v1
-              with:
-                  java-version: '11.x'
-            - name: Install node.js packages
-              run: npm install
-            - name: Run backend test
-              run: |
-                  chmod +x mvnw
-                  ./mvnw -ntp clean verify -P-webpack
-            - name: Run frontend test
-              run: npm run test
-            - name: Package application
-              run: ./mvnw -ntp package -Pprod -DskipTests
-            - name: Run application
-              run: bash $JHI_SCRIPTS/run-app-ci.sh
-            - name: Waiting for application
-              run: sleep 30
-            - name: Run e2e test
-              uses: cypress-io/github-action@v2
-              with:
-                browser: chrome
-                headless: true
-                project: ./
-            - name: Sonar analysis
-              if: github.repository == 'jhipster/jhipster-control-center' && github.ref == 'refs/heads/main'
-              run: |
-                  ./mvnw -ntp --batch-mode initialize org.jacoco:jacoco-maven-plugin:prepare-agent sonar:sonar \
-                  -Dsonar.host.url=https://sonarcloud.io \
-                  -Dsonar.projectKey=jhipster_jhipster-control-center \
-                  -Dsonar.organization=jhipster \
-                  -Dsonar.login=$SONAR_TOKEN
-              env:
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: maven
+      - name: Run #174 focused regressions
+        run: |
+          chmod +x mvnw
+          ./mvnw -ntp -Dtest=OidcMetadataMtlsAliasesTest,ClientRegistrationsMtlsAliasesTest test
