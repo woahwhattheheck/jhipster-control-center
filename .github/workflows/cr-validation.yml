@@ -17,13 +17,13 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         env:
-            PR_SHA: e2e73ae657e974901b7b6eb04dc94356ada8ce41
+            PR_SHA: 8dedbe72532034824187a9ea108aa51b96132fff
             BASE_SHA: a8e84d3addc29075849bc43b31e0e656b8a09926
         steps:
             - name: Check out the exact PR #227 commit
               uses: actions/checkout@v4
               with:
-                  ref: e2e73ae657e974901b7b6eb04dc94356ada8ce41
+                  ref: 8dedbe72532034824187a9ea108aa51b96132fff
                   fetch-depth: 0
                   persist-credentials: false
 
@@ -37,7 +37,7 @@ jobs:
                   fi
                   echo "--- pinned Nimbus generation on tested carrier ---"
                   grep -F "<oauth2-oidc-sdk.version>9.43.6</oauth2-oidc-sdk.version>" pom.xml
-                  grep -F "<nimbus-jose-jwt.version>9.37.3</nimbus-jose-jwt.version>" pom.xml
+                  grep -F "<nimbus-jose-jwt.version>9.37.4</nimbus-jose-jwt.version>" pom.xml
                   echo "--- Keycloak environment bound by the live carrier ---"
                   grep -F 'image: jboss/keycloak:15.0.2' src/main/docker/keycloak.yml
                   test -f src/test/java/tech/jhipster/controlcenter/config/OidcMetadataMtlsAliasesTest.java
