@@ -79,6 +79,13 @@ jobs:
                   echo "===== BEFORE tree ====="; cat before-tree.txt || true
                   echo "===== AFTER tree =====";  cat after-tree.txt  || true
 
+            - name: Require the unpatched control to reproduce the regression
+              run: |
+                  if [ "${{ steps.before_test.outcome }}" != "failure" ]; then
+                    echo "::error::Expected the unpatched control to fail; got ${{ steps.before_test.outcome }}"
+                    exit 1
+                  fi
+
             - name: Upload dependency trees
               if: always()
               uses: actions/upload-artifact@v4
