@@ -69,7 +69,7 @@ jobs:
 
             - name: BEFORE - resolved Nimbus artifacts (unpatched pom)
               run: |
-                  mvn -ntp -Pwebapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=before-tree.txt --batch-mode
+                  mvn -ntp -P-webapp dependency:tree -Dincludes=com.nimbusds -DoutputFile=before-tree.txt --batch-mode
                   echo "--- com.nimbusds resolved BEFORE the fix ---"
                   grep -i nimbusds before-tree.txt || echo "(none reported)"
 
