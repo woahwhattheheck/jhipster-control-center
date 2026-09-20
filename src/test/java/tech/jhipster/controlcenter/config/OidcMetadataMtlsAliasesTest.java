@@ -6,9 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import com.nimbusds.oauth2.sdk.as.AuthorizationServerEndpointMetadata;
 import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
@@ -40,12 +42,9 @@ class OidcMetadataMtlsAliasesTest {
 
     private static final String MTLS_AUTHORIZATION_ENDPOINT = ISSUER + "/protocol/openid-connect/auth/mtls";
 
-    private static JSONArray array(String... values) {
-        JSONArray array = new JSONArray();
-        for (String value : values) {
-            array.add(value);
-        }
-        return array;
+    private static List<String> array(String... values) {
+        // Jackson presents discovery arrays as Java lists on the startup path.
+        return new ArrayList<>(Arrays.asList(values));
     }
 
     /**
