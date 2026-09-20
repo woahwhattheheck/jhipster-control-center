@@ -1,0 +1,25 @@
+name: PR 233 exact-head validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc81c944e6bd412f64f490134c5cfb9d1b2c8ef9
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact sponsor PR head
+        run: test "$(git rev-parse HEAD)" = cc81c944e6bd412f64f490134c5cfb9d1b2c8ef9
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Run issue 174 regressions
+        run: mvn -ntp -P-webapp test -Dtest=OidcMetadataMtlsAliasesTest,ClientRegistrationsMtlsAliasesTest -DfailIfNoTests=true --batch-mode
+      - name: Run full backend verification
+        run: mvn -ntp -P-webapp verify --batch-mode
