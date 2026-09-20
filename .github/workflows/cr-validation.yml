@@ -14,20 +14,20 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         env:
-            PR_SHA: eb9b89a2380409c4f44283895a4003801080b56a
+            PR_SHA: 1226ed1c3e9a26bf04dccef6b6e37d8d7b565711
             BASE_SHA: a8e84d3addc29075849bc43b31e0e656b8a09926
         steps:
             - name: Check out the exact PR #227 commit
               uses: actions/checkout@v4
               with:
-                  ref: eb9b89a2380409c4f44283895a4003801080b56a
+                  ref: 1226ed1c3e9a26bf04dccef6b6e37d8d7b565711
                   fetch-depth: 0
 
             - name: Confirm the tested tree
               run: |
                   echo "HEAD: $(git rev-parse HEAD)"
-                  echo "--- oauth2-client override should be ABSENT here ---"
-                  grep -n "oauth2-client.version" pom.xml || echo "override absent (expected)"
+                  echo "--- oauth2-client override on tested carrier ---"
+                  grep -n "oauth2-client.version" pom.xml || echo "override absent"
                   ls -l src/test/java/tech/jhipster/controlcenter/config/OidcMetadataMtlsAliasesTest.java
 
             - name: Set up JDK 11
